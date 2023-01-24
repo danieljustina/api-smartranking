@@ -1,9 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CriarJogadorDto } from './dtos/criar-jogador.dto';
 import { Jogador } from './interfaces/jogador.interface';
 import { v4 as uuidv4 } from 'uuid';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { AtualizarJogadorDto } from './dtos/atualizar-jogador.dto';
 
 
 @Injectable()
@@ -14,43 +15,45 @@ export class JogadoresService {
     constructor(@InjectModel('Jogador') private readonly jogadorModel: Model<Jogador> ) {
     }
 
-    async criarAtualizarJogador(criarJogadorDto: CriarJogadorDto): Promise<void> {      
+    async criarJogador(criarJogadorDto: CriarJogadorDto): Promise<Jogador> {      
         const { email } = criarJogadorDto;
         const jogadorEncontrado = await this.jogadorModel.findOne({email}).exec();
 
         if(jogadorEncontrado) {
-            this.atualizar(criarJogadorDto);
-        } else {
-            this.criar(criarJogadorDto);
-        }
+            throw new BadRequestException(`Jogador com e-mail ${email} já cadastrado!`);
+        } 
+        const jogadorCriador = new this.jogadorModel(criarJogadorDto);
+        return await jogadorCriador.save();
+    }
+
+    async atualizarJogador(_id: string, jogadorDto: AtualizarJogadorDto): Promise<void> {      
+        const jogadorEncontrado = await this.jogadorModel.findOne({_id}).exec();
+
+        if(!jogadorEncontrado) {
+            throw new NotFoundException(`Jogador com id ${_id} não encontrado!`);
+        } 
+            
+        await this.jogadorModel.findOneAndUpdate({_id}, {$set: jogadorDto}).exec();
     }
 
     async consultarTodosJogadores(): Promise<Jogador[]> {      
         return await this.jogadorModel.find().exec();
     }
 
-    async consultarJogadoresPeloEmail(email: string): Promise<Jogador> {     
-        const jogadorEncontrado = await this.jogadorModel.findOne({email}).exec();
-        if (jogadorEncontrado) {
-            return jogadorEncontrado;
+    async consultarJogadoresPeloId(_id: string): Promise<Jogador> {     
+        const jogadorEncontrado = await this.jogadorModel.findOne({_id}).exec();
+        if (!jogadorEncontrado) {
+            throw new NotFoundException(`Jogador com id ${_id} não encontrado!`);  
         }
-        throw new NotFoundException(`Jogador com email ${email} não encontrado!`);        
+        return jogadorEncontrado;              
     }
 
-    async deletarJogadores(email: string): Promise<any> { 
-        return await this.jogadorModel.remove({email}).exec();       
-    }
+    async deletarJogadores(_id: string): Promise<any> { 
+        const jogadorEncontrado = await this.jogadorModel.findOne({_id}).exec();
+        if (!jogadorEncontrado) {
+            throw new NotFoundException(`Jogador com id ${_id} não encontrado!`);  
+        }
 
-    private async criar(criarJogadorDto: CriarJogadorDto): Promise<Jogador> {
-        const jogadorCriador = new this.jogadorModel(criarJogadorDto);
-        return await jogadorCriador.save();
+        return await this.jogadorModel.deleteOne({_id}).exec();       
     }
-
-    private async atualizar(criarJogadorDto: CriarJogadorDto): Promise<Jogador> {
-        return await this.jogadorModel.findOneAndUpdate( 
-                {email: criarJogadorDto.email}, 
-                {$set: criarJogadorDto}
-            ).exec();
-    }
-
 }
